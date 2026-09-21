@@ -7,6 +7,7 @@ class EC2Instance:
     instance_id: str
     name: str
     subnet_id: str
+    security_group_id: str
 
 
 @dataclass
@@ -44,6 +45,7 @@ class MockAWSProvider:
                 instance_id="i-001",
                 name="web-server",
                 subnet_id="subnet-public",
+                security_group_id="sg-001",
             )
         ]
 

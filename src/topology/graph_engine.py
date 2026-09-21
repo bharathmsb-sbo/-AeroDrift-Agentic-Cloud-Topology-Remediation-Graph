@@ -35,7 +35,7 @@ class CloudTopology:
             )
 
     def _add_instances(self) -> None:
-        """Add EC2 instances and connect them to their subnets."""
+        """Add EC2 instances and connect them to their subnet and security group."""
 
         for instance in self.resources["ec2_instances"]:
             self.graph.add_node(
@@ -48,6 +48,12 @@ class CloudTopology:
                 instance.instance_id,
                 instance.subnet_id,
                 relationship="located_in",
+            )
+
+            self.graph.add_edge(
+                instance.security_group_id,
+                instance.instance_id,
+                relationship="protects",
             )
 
     def _add_databases(self) -> None:
