@@ -8,6 +8,7 @@ from rich.rule import Rule
 from rich.columns import Columns
 
 from src.detection.drift_detector import detect_drift
+from src.remediation.executor import execute_remediation
 from src.topology.graph_engine import build_mock_topology
 
 
@@ -23,6 +24,7 @@ class AeroDriftDashboard:
     - Detects cloud security drift
     - Displays detected findings
     - Shows a summary of the current cloud state
+    - Executes safe dry-run remediation
     """
 
     def __init__(self) -> None:
@@ -299,6 +301,25 @@ class AeroDriftDashboard:
 
         console.print(remediation_table)
 
+    def execute_remediation(self) -> None:
+        """
+        Execute remediation for all detected drift findings
+        using the safe dry-run executor.
+        """
+
+        if not self.findings:
+            return
+
+        console.print(
+            Rule(
+                "Automated Remediation",
+                style="yellow",
+            )
+        )
+
+        for finding in self.findings:
+            execute_remediation(finding)
+
     def display_graph_summary(self) -> None:
         """Display basic topology graph information."""
 
@@ -352,6 +373,10 @@ class AeroDriftDashboard:
         console.print()
 
         self.display_remediation_summary()
+
+        console.print()
+
+        self.execute_remediation()
 
 
 def run_dashboard() -> None:
