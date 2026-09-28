@@ -5,7 +5,7 @@ Configuration management for AeroDrift.
 import os
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,7 +54,7 @@ class Config:
     @classmethod
     def from_file(cls, config_path: str = "aerodrift_config.json") -> 'Config':
         """
-        Load configuration from a JSON file.
+        Load configuration from a JSON file with validation.
         
         Args:
             config_path: Path to configuration file
@@ -72,13 +72,22 @@ class Config:
             with open(config_file, 'r') as f:
                 config_data = json.load(f)
             
+            # Validate configuration structure
+            validation_result = cls._validate_config_structure(config_data)
+            if not validation_result['is_valid']:
+                logger.error(f"Configuration validation failed: {validation_result['errors']}")
+                raise ValueError(f"Invalid configuration: {validation_result['errors']}")
+            
             config = cls(**config_data)
             logger.info(f"Configuration loaded from {config_path}")
             return config
             
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in config file {config_path}: {e}")
+            raise ValueError(f"Invalid JSON in configuration file: {e}")
         except Exception as e:
             logger.error(f"Error loading config from {config_path}: {e}")
-            return cls()
+            raise
     
     def to_file(self, config_path: str = "aerodrift_config.json"):
         """
@@ -149,6 +158,95 @@ class Config:
                 
                 setattr(self, config_key, env_value)
                 logger.info(f"Overrode {config_key} from environment variable {env_var}")
+    
+    @classmethod
+    def _validate_config_structure(cls, config_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate configuration file structure and values.
+        
+        Args:
+            config_data: Configuration dictionary to validate
+            
+        Returns:
+            Dictionary with validation results
+        """
+        result = {'is_valid': True, 'errors': [], 'warnings': []}
+        
+        # Check required fields
+        optional_fields = [
+            'aws_region', 'aws_use_mock', 'aws_access_key_id', 'aws_secret_access_key',
+            'polling_interval', 'polling_enabled', 'db_path', 'db_retention_days',
+            'auto_remediate', 'remediation_timeout', 'require_approval',
+            'log_level', 'log_file', 'dashboard_refresh_rate', 'enable_live_monitoring',
+            'enable_notifications', 'notification_webhook', 'max_execution_history',
+            'snapshot_batch_size'
+        ]
+        
+        # Validate field types
+        type_validations = {
+            'aws_region': str,
+            'aws_use_mock': bool,
+            'aws_access_key_id': (str, type(None)),
+            'aws_secret_access_key': (str, type(None)),
+            'polling_interval': int,
+            'polling_enabled': bool,
+            'db_path': str,
+            'db_retention_days': int,
+            'auto_remediate': bool,
+            'remediation_timeout': int,
+            'require_approval': bool,
+            'log_level': str,
+            'log_file': (str, type(None)),
+            'dashboard_refresh_rate': float,
+            'enable_live_monitoring': bool,
+            'enable_notifications': bool,
+            'notification_webhook': (str, type(None)),
+            'max_execution_history': int,
+            'snapshot_batch_size': int
+        }
+        
+        for field, expected_type in type_validations.items():
+            if field in config_data:
+                if not isinstance(config_data[field], expected_type):
+                    result['errors'].append(
+                        f"Field '{field}' has invalid type. Expected {expected_type}, got {type(config_data[field])}"
+                    )
+                    result['is_valid'] = False
+        
+        # Validate specific field values
+        if 'aws_region' in config_data:
+            region = config_data['aws_region']
+            if not isinstance(region, str) or not region:
+                result['errors'].append("AWS region must be a non-empty string")
+                result['is_valid'] = False
+        
+        if 'polling_interval' in config_data:
+            interval = config_data['polling_interval']
+            if not isinstance(interval, int) or interval < 1:
+                result['errors'].append("Polling interval must be a positive integer")
+                result['is_valid'] = False
+        
+        if 'remediation_timeout' in config_data:
+            timeout = config_data['remediation_timeout']
+            if not isinstance(timeout, int) or timeout < 1:
+                result['errors'].append("Remediation timeout must be a positive integer")
+                result['is_valid'] = False
+        
+        if 'log_level' in config_data:
+            valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+            level = config_data['log_level']
+            if not isinstance(level, str) or level.upper() not in valid_levels:
+                result['errors'].append(f"Invalid log level: {level}. Must be one of {valid_levels}")
+                result['is_valid'] = False
+        
+        # Security warnings
+        if 'aws_access_key_id' in config_data and config_data['aws_access_key_id']:
+            result['warnings'].append("AWS credentials found in configuration file")
+        
+        if 'aws_secret_access_key' in config_data and config_data['aws_secret_access_key']:
+            result['warnings'].append("AWS secret key found in configuration file")
+        
+        return result
     
     def validate(self) -> bool:
         """
