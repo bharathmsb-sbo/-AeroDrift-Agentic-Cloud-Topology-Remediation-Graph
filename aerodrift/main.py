@@ -8,6 +8,7 @@ import argparse
 import sys
 from typing import Optional
 from datetime import datetime
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,37 @@ from aerodrift.code_generator import CodeGenerator
 from aerodrift.cli_dashboard import CLIDashboard
 from aerodrift.state_persistence import StatePersistence
 from aerodrift.utils import Config, ExecutionSandbox
+
+
+def handle_errors(error_message: str = "An error occurred"):
+    """
+    Decorator for comprehensive error handling in async functions.
+    
+    Args:
+        error_message: Custom error message to display
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except ConnectionError as e:
+                logger.error(f"Connection error in {func.__name__}: {e}")
+                raise RuntimeError(f"Connection failed: {e}") from e
+            except TimeoutError as e:
+                logger.error(f"Timeout error in {func.__name__}: {e}")
+                raise RuntimeError(f"Operation timed out: {e}") from e
+            except ValueError as e:
+                logger.error(f"Validation error in {func.__name__}: {e}")
+                raise ValueError(f"Invalid input: {e}") from e
+            except KeyError as e:
+                logger.error(f"Key error in {func.__name__}: {e}")
+                raise KeyError(f"Missing required data: {e}") from e
+            except Exception as e:
+                logger.error(f"Unexpected error in {func.__name__}: {e}")
+                raise RuntimeError(f"{error_message}: {e}") from e
+        return wrapper
+    return decorator
 
 
 class AeroDriftDaemon:
@@ -58,27 +90,39 @@ class AeroDriftDaemon:
         self.running = False
         logger.info("AeroDrift daemon initialized")
     
+    @handle_errors("Failed to initialize daemon")
     async def initialize(self):
         """Initialize the daemon by collecting initial baseline data."""
         self.dashboard.print_header("AeroDrift Daemon")
         self.dashboard.print_info("Initializing AeroDrift daemon...")
         
-        # Collect initial AWS data
-        self.dashboard.print_info("Collecting initial AWS resources...")
-        aws_data = await self.ingestion.collect_all_resources()
-        
-        # Build initial topology
-        self.dashboard.print_info("Building initial topology graph...")
-        self.topology.build_from_aws_data(aws_data)
-        
-        # Set baseline
-        self.drift_detector.set_baseline(self.topology)
-        
-        # Save initial snapshot
-        self.persistence.save_topology_snapshot(aws_data)
-        
-        self.dashboard.print_success("AeroDrift daemon initialized successfully")
-        self.dashboard.print()
+        try:
+            # Collect initial AWS data
+            self.dashboard.print_info("Collecting initial AWS resources...")
+            aws_data = await self.ingestion.collect_all_resources()
+            
+            if not aws_data or not aws_data.get('vpcs'):
+                raise ValueError("No AWS data collected or empty VPC list")
+            
+            # Build initial topology
+            self.dashboard.print_info("Building initial topology graph...")
+            self.topology.build_from_aws_data(aws_data)
+            
+            if self.topology.graph.number_of_nodes() == 0:
+                raise ValueError("Topology graph is empty after building")
+            
+            # Set baseline
+            self.drift_detector.set_baseline(self.topology)
+            
+            # Save initial snapshot
+            self.persistence.save_topology_snapshot(aws_data)
+            
+            self.dashboard.print_success("AeroDrift daemon initialized successfully")
+            self.dashboard.print()
+            
+        except Exception as e:
+            self.dashboard.print_error(f"Initialization failed: {str(e)}")
+            raise
     
     async def run_single_scan(self):
         """Run a single scan for drift detection."""
