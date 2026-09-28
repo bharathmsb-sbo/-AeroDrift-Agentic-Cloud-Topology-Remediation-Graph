@@ -153,7 +153,7 @@ class DriftDetector:
                         resource_type=resource.resource_type.value,
                         description=f"Resource {resource.name} can now reach the Internet",
                         affected_resources=current_has_path,
-                        metadata={'path': self.current_graph._describe_path(current_has_path)}
+                        metadata={'path': self.current_graph._describe_path(tuple(current_has_path))}
                     )
     
     def _detect_exposed_databases(self):

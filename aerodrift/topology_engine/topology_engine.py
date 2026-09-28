@@ -7,6 +7,9 @@ import logging
 from typing import Dict, List, Any, Optional, Set, Tuple
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
+from time import time
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,17 @@ class TopologyEngine:
         self.graph = nx.DiGraph()
         self.resource_index: Dict[str, ResourceNode] = {}
         self.internet_gateway_id = "internet-gateway-0.0.0.0/0"
+        
+        # Performance optimization: Cache for path-finding results
+        self._path_cache: Dict[Tuple[str, str], Optional[List[str]]] = {}
+        self._cache_lock = threading.Lock()
+        self._cache_timestamp: float = 0
+        self._cache_ttl: int = 300  # Cache time-to-live in seconds
+        
+        # Performance tracking
+        self._operation_times: Dict[str, List[float]] = {}
+        self._cache_hits: int = 0
+        self._cache_misses: int = 0
     
     def add_resource(self, resource: ResourceNode):
         """
@@ -85,6 +99,9 @@ class TopologyEngine:
             aws_data: Dictionary containing VPCs, subnets, security groups, and instances
         """
         logger.info("Building topology graph from AWS data...")
+        
+        # Invalidate cache since topology is changing
+        self.invalidate_cache()
         
         # Add Internet gateway node
         internet_node = ResourceNode(
@@ -213,7 +230,7 @@ class TopologyEngine:
     
     def find_path_to_internet(self, resource_id: str) -> Optional[List[str]]:
         """
-        Find if there's a path from a resource to the Internet.
+        Find if there's a path from a resource to the Internet with caching.
         
         Args:
             resource_id: Resource ID to check
@@ -221,15 +238,44 @@ class TopologyEngine:
         Returns:
             List of resource IDs representing the path, or None if no path exists
         """
+        start_time = time()
+        
+        # Check cache first
+        cache_key = (resource_id, self.internet_gateway_id)
+        with self._cache_lock:
+            if cache_key in self._path_cache:
+                # Check if cache is still valid
+                if time() - self._cache_timestamp < self._cache_ttl:
+                    self._cache_hits += 1
+                    logger.debug(f"Cache hit for path query: {resource_id} -> internet")
+                    self._track_operation('find_path_to_internet', time() - start_time)
+                    return self._path_cache[cache_key]
+        
+        # Cache miss - compute path
         try:
             path = nx.shortest_path(self.graph, resource_id, self.internet_gateway_id)
+            
+            # Update cache
+            with self._cache_lock:
+                self._path_cache[cache_key] = path
+                self._cache_timestamp = time()
+                self._cache_misses += 1
+            
+            self._track_operation('find_path_to_internet', time() - start_time)
             return path
         except nx.NetworkXNoPath:
+            # Cache negative result too
+            with self._cache_lock:
+                self._path_cache[cache_key] = None
+                self._cache_timestamp = time()
+                self._cache_misses += 1
+            
+            self._track_operation('find_path_to_internet', time() - start_time)
             return None
     
     def find_path_from_internet(self, resource_id: str) -> Optional[List[str]]:
         """
-        Find if there's a path from the Internet to a resource (external access).
+        Find if there's a path from the Internet to a resource (external access) with caching.
         
         Args:
             resource_id: Resource ID to check
@@ -237,31 +283,71 @@ class TopologyEngine:
         Returns:
             List of resource IDs representing the path, or None if no path exists
         """
+        start_time = time()
+        
+        # Check cache first
+        cache_key = (self.internet_gateway_id, resource_id)
+        with self._cache_lock:
+            if cache_key in self._path_cache:
+                # Check if cache is still valid
+                if time() - self._cache_timestamp < self._cache_ttl:
+                    self._cache_hits += 1
+                    logger.debug(f"Cache hit for path query: internet -> {resource_id}")
+                    self._track_operation('find_path_from_internet', time() - start_time)
+                    return self._path_cache[cache_key]
+        
+        # Cache miss - compute path
         try:
             path = nx.shortest_path(self.graph, self.internet_gateway_id, resource_id)
+            
+            # Update cache
+            with self._cache_lock:
+                self._path_cache[cache_key] = path
+                self._cache_timestamp = time()
+                self._cache_misses += 1
+            
+            self._track_operation('find_path_from_internet', time() - start_time)
             return path
         except nx.NetworkXNoPath:
+            # Cache negative result too
+            with self._cache_lock:
+                self._path_cache[cache_key] = None
+                self._cache_timestamp = time()
+                self._cache_misses += 1
+            
+            self._track_operation('find_path_from_internet', time() - start_time)
             return None
     
     def find_exposed_databases(self) -> List[Dict[str, Any]]:
         """
-        Find all database resources that are accessible from the Internet.
+        Find all database resources that are accessible from the Internet with batch processing.
         
         Returns:
             List of dictionaries containing exposed database info and paths
         """
+        start_time = time()
         exposed_databases = []
         
-        for resource_id, resource in self.resource_index.items():
-            if resource.resource_type == ResourceType.DATABASE:
-                path = self.find_path_from_internet(resource_id)
-                if path:
-                    exposed_databases.append({
-                        'resource_id': resource_id,
-                        'name': resource.name,
-                        'path': path,
-                        'path_description': self._describe_path(path)
-                    })
+        # Collect all database IDs first
+        database_ids = [
+            resource_id for resource_id, resource in self.resource_index.items()
+            if resource.resource_type == ResourceType.DATABASE
+        ]
+        
+        # Batch process path queries
+        for resource_id in database_ids:
+            path = self.find_path_from_internet(resource_id)
+            if path:
+                resource = self.resource_index[resource_id]
+                exposed_databases.append({
+                    'resource_id': resource_id,
+                    'name': resource.name,
+                    'path': path,
+                    'path_description': self._describe_path(tuple(path))
+                })
+        
+        self._track_operation('find_exposed_databases', time() - start_time)
+        logger.info(f"Found {len(exposed_databases)} exposed databases in {time() - start_time:.3f}s")
         
         return exposed_databases
     
@@ -311,12 +397,13 @@ class TopologyEngine:
         else:
             return list(self.graph.predecessors(resource_id)) + list(self.graph.successors(resource_id))
     
-    def _describe_path(self, path: List[str]) -> str:
+    @lru_cache(maxsize=1000)
+    def _describe_path(self, path: tuple) -> str:
         """
-        Generate a human-readable description of a path.
+        Generate a human-readable description of a path with caching.
         
         Args:
-            path: List of resource IDs
+            path: Tuple of resource IDs (for hashability)
             
         Returns:
             Human-readable path description
@@ -386,7 +473,76 @@ class TopologyEngine:
         return filepath
     
     def clear(self):
-        """Clear the topology graph."""
+        """Clear the topology graph and cache."""
         self.graph.clear()
         self.resource_index.clear()
-        logger.info("Topology graph cleared")
+        
+        # Clear cache
+        with self._cache_lock:
+            self._path_cache.clear()
+            self._cache_timestamp = 0
+        
+        logger.info("Topology graph and cache cleared")
+    
+    def _track_operation(self, operation_name: str, duration: float):
+        """
+        Track operation performance for monitoring.
+        
+        Args:
+            operation_name: Name of the operation
+            duration: Duration in seconds
+        """
+        if operation_name not in self._operation_times:
+            self._operation_times[operation_name] = []
+        
+        self._operation_times[operation_name].append(duration)
+        
+        # Keep only last 100 measurements
+        if len(self._operation_times[operation_name]) > 100:
+            self._operation_times[operation_name] = self._operation_times[operation_name][-100:]
+    
+    def invalidate_cache(self):
+        """Invalidate the path cache when topology changes."""
+        with self._cache_lock:
+            self._path_cache.clear()
+            self._cache_timestamp = 0
+        logger.debug("Path cache invalidated")
+    
+    def get_cache_statistics(self) -> Dict[str, Any]:
+        """
+        Get cache performance statistics.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        with self._cache_lock:
+            total_requests = self._cache_hits + self._cache_misses
+            hit_rate = (self._cache_hits / total_requests * 100) if total_requests > 0 else 0
+            
+            return {
+                'cache_hits': self._cache_hits,
+                'cache_misses': self._cache_misses,
+                'hit_rate': f"{hit_rate:.2f}%",
+                'cache_size': len(self._path_cache),
+                'cache_age': time() - self._cache_timestamp
+            }
+    
+    def get_performance_statistics(self) -> Dict[str, Any]:
+        """
+        Get performance statistics for operations.
+        
+        Returns:
+            Dictionary with performance statistics
+        """
+        stats = {}
+        for operation, times in self._operation_times.items():
+            if times:
+                stats[operation] = {
+                    'count': len(times),
+                    'avg_time': sum(times) / len(times),
+                    'min_time': min(times),
+                    'max_time': max(times),
+                    'total_time': sum(times)
+                }
+        
+        return stats
