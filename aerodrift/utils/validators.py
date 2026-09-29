@@ -19,7 +19,7 @@ class ValidationError(Exception):
     pass
 
 
-class SecurityLevel(Enum):
+class ValidationValidationSecurityLevel(Enum):
     """Security levels for validation."""
     STRICT = "strict"
     MODERATE = "moderate"
@@ -64,7 +64,7 @@ class InputValidator:
     MAX_ARRAY_LENGTH = 1000
     MAX_NESTING_DEPTH = 10
     
-    def __init__(self, security_level: SecurityLevel = SecurityLevel.MODERATE):
+    def __init__(self, security_level: ValidationSecurityLevel = ValidationSecurityLevel.MODERATE):
         """
         Initialize the validator with specified security level.
         
@@ -306,7 +306,7 @@ class InputValidator:
             result.add_error("File path contains directory traversal attempt")
         
         # Check for absolute paths in strict mode
-        if self.security_level == SecurityLevel.STRICT and file_path.startswith('/'):
+        if self.security_level == ValidationSecurityLevel.STRICT and file_path.startswith('/'):
             result.add_warning("Absolute file path detected")
         
         # Check length
