@@ -8,8 +8,9 @@ from rich.rule import Rule
 from rich.columns import Columns
 
 from src.detection.drift_detector import detect_drift
+from src.ingestion.mock_aws import MockAWSProvider
 from src.remediation.executor import execute_remediation
-from src.topology.graph_engine import build_mock_topology
+from src.topology.graph_engine import CloudTopology
 
 
 console = Console()
@@ -31,6 +32,7 @@ class AeroDriftDashboard:
         """Initialize the dashboard."""
 
         self.graph = None
+        self.resources = None
         self.findings: list[dict] = []
 
     def load_cloud_topology(self) -> None:
@@ -39,7 +41,13 @@ class AeroDriftDashboard:
         from the mock AWS provider.
         """
 
-        self.graph = build_mock_topology()
+        provider = MockAWSProvider()
+
+        self.resources = provider.get_all_resources()
+
+        topology = CloudTopology(self.resources)
+
+        self.graph = topology.build()
 
     def detect_cloud_drift(self) -> None:
         """
@@ -310,6 +318,11 @@ class AeroDriftDashboard:
         if not self.findings:
             return
 
+        if self.resources is None:
+            raise RuntimeError(
+                "Cloud resources must be loaded before remediation."
+            )
+
         console.print(
             Rule(
                 "Automated Remediation",
@@ -318,7 +331,10 @@ class AeroDriftDashboard:
         )
 
         for finding in self.findings:
-            execute_remediation(finding)
+            execute_remediation(
+                self.resources,
+                finding,
+            )
 
     def display_graph_summary(self) -> None:
         """Display basic topology graph information."""
