@@ -1,6 +1,7 @@
 import ast
 
 from src.remediation.code_generator import generate_remediation_code
+from src.remediation.verifier import verify_remediation
 
 
 class MockEC2Client:
@@ -120,8 +121,9 @@ class RemediationExecutor:
 
     def execute_finding(self, finding: dict) -> str:
         """
-        Generate remediation code from a drift finding
-        and execute it in dry-run mode.
+        Generate remediation code from a drift finding,
+        execute it in dry-run mode,
+        and verify the remediation.
         """
 
         code = generate_remediation_code(finding)
@@ -130,6 +132,26 @@ class RemediationExecutor:
         print(code)
 
         self.execute(code)
+
+        verified = verify_remediation(
+            self.resources,
+            finding,
+        )
+
+        if verified:
+            print("\n[VERIFICATION] Remediation verified")
+            print(
+                f"Security Group: "
+                f"{finding['security_group']}"
+            )
+            print("Status: DRIFT RESOLVED")
+        else:
+            print("\n[VERIFICATION] Remediation verification failed")
+            print(
+                f"Security Group: "
+                f"{finding['security_group']}"
+            )
+            print("Status: DRIFT STILL PRESENT")
 
         return code
 
