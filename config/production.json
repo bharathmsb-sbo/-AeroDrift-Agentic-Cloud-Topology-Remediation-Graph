@@ -1,0 +1,19 @@
+{
+  "aws_region": "us-east-1",
+  "aws_use_mock": false,
+  "polling_interval": 60,
+  "polling_enabled": true,
+  "db_path": "/app/data/aerodrift_states.db",
+  "db_retention_days": 90,
+  "auto_remediate": false,
+  "remediation_timeout": 30,
+  "require_approval": true,
+  "log_level": "INFO",
+  "log_file": "/app/logs/aerodrift.log",
+  "dashboard_refresh_rate": 1.0,
+  "enable_live_monitoring": false,
+  "enable_notifications": true,
+  "notification_webhook": null,
+  "max_execution_history": 1000,
+  "snapshot_batch_size": 50
+}
