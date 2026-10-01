@@ -72,6 +72,7 @@ class TopologyEngine:
         """
         self.graph.add_node(resource.resource_id, **resource.attributes)
         self.resource_index[resource.resource_id] = resource
+        self.invalidate_cache()
         logger.debug(f"Added resource node: {resource.resource_id} ({resource.resource_type.value})")
     
     def add_network_edge(self, source_id: str, target_id: str, 
@@ -89,6 +90,7 @@ class TopologyEngine:
         edge_attrs['edge_type'] = edge_type
         
         self.graph.add_edge(source_id, target_id, **edge_attrs)
+        self.invalidate_cache()
         logger.debug(f"Added edge: {source_id} -> {target_id} ({edge_type})")
     
     def build_from_aws_data(self, aws_data: Dict[str, Any]):
