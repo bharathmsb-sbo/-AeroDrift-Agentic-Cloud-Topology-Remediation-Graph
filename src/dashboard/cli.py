@@ -8,6 +8,7 @@ from rich.rule import Rule
 from rich.columns import Columns
 
 from src.detection.drift_detector import detect_drift
+from src.history.incident_report import generate_incident_report
 from src.ingestion.mock_aws import MockAWSProvider
 from src.remediation.executor import execute_remediation
 from src.topology.graph_engine import CloudTopology
@@ -26,6 +27,7 @@ class AeroDriftDashboard:
     - Displays detected findings
     - Shows a summary of the current cloud state
     - Executes safe dry-run remediation
+    - Generates PDF incident reports
     """
 
     def __init__(self) -> None:
@@ -205,6 +207,7 @@ class AeroDriftDashboard:
                     border_style="green",
                 )
             )
+
             return
 
         table = Table(
@@ -268,6 +271,7 @@ class AeroDriftDashboard:
                     border_style="green",
                 )
             )
+
             return
 
         remediation_table = Table(
@@ -313,6 +317,9 @@ class AeroDriftDashboard:
         """
         Execute remediation for all detected drift findings
         using the safe dry-run executor.
+
+        Generate a PDF incident report after
+        each remediation is completed.
         """
 
         if not self.findings:
@@ -331,9 +338,23 @@ class AeroDriftDashboard:
         )
 
         for finding in self.findings:
+
             execute_remediation(
                 self.resources,
                 finding,
+            )
+
+            report_path = generate_incident_report(
+                finding=finding,
+                remediation_status="DRIFT RESOLVED",
+            )
+
+            console.print(
+                Panel(
+                    f"Incident report generated:\n{report_path}",
+                    title="PDF Incident Report",
+                    border_style="green",
+                )
             )
 
     def display_graph_summary(self) -> None:
