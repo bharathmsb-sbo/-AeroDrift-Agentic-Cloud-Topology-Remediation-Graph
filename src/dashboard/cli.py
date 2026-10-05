@@ -8,6 +8,8 @@ from rich.rule import Rule
 from rich.columns import Columns
 
 from src.detection.drift_detector import detect_drift
+from src.history.database import HistoryDatabase
+from src.history.diff import compare_snapshots
 from src.history.incident_report import generate_incident_report
 from src.ingestion.mock_aws import MockAWSProvider
 from src.remediation.executor import execute_remediation
@@ -26,6 +28,8 @@ class AeroDriftDashboard:
     - Detects cloud security drift
     - Displays detected findings
     - Shows a summary of the current cloud state
+    - Compares the current topology with historical state
+    - Stores topology snapshots in SQLite
     - Executes safe dry-run remediation
     - Generates PDF incident reports
     """
@@ -36,6 +40,7 @@ class AeroDriftDashboard:
         self.graph = None
         self.resources = None
         self.findings: list[dict] = []
+        self.history_db = HistoryDatabase()
 
     def load_cloud_topology(self) -> None:
         """
@@ -313,6 +318,173 @@ class AeroDriftDashboard:
 
         console.print(remediation_table)
 
+    def display_history_diff(self) -> None:
+        """
+        Compare the current topology with the
+        previous historical snapshot and display
+        the detected changes.
+
+        The current snapshot is saved only after
+        the comparison is completed.
+        """
+
+        if self.graph is None:
+            return
+
+        console.print(
+            Rule(
+                "Topology History",
+                style="blue",
+            )
+        )
+
+        self.history_db.initialize()
+
+        previous_snapshot = (
+            self.history_db.get_latest_snapshot()
+        )
+
+        if previous_snapshot is None:
+            console.print(
+                Panel(
+                    "No previous topology snapshot found.\n"
+                    "This scan will be stored as the first historical snapshot.",
+                    title="History",
+                    border_style="blue",
+                )
+            )
+
+            self.history_db.save_snapshot(self.graph)
+
+            return
+
+        current_snapshot = {
+            "graph_data": {
+                "nodes": [
+                    {
+                        "id": node,
+                        "data": data,
+                    }
+                    for node, data in self.graph.nodes(data=True)
+                ],
+                "edges": [
+                    {
+                        "source": source,
+                        "target": target,
+                        "data": data,
+                    }
+                    for source, target, data in self.graph.edges(data=True)
+                ],
+            }
+        }
+
+        diff = compare_snapshots(
+            previous_snapshot,
+            current_snapshot,
+        )
+
+        added_nodes = diff["added_nodes"]
+        removed_nodes = diff["removed_nodes"]
+        added_edges = diff["added_edges"]
+        removed_edges = diff["removed_edges"]
+
+        history_table = Table(
+            title="Topology Changes",
+            show_header=True,
+        )
+
+        history_table.add_column(
+            "Change Type",
+            style="cyan",
+        )
+
+        history_table.add_column(
+            "Count",
+            justify="center",
+            style="yellow",
+        )
+
+        history_table.add_row(
+            "Added Nodes",
+            str(len(added_nodes)),
+        )
+
+        history_table.add_row(
+            "Removed Nodes",
+            str(len(removed_nodes)),
+        )
+
+        history_table.add_row(
+            "Added Edges",
+            str(len(added_edges)),
+        )
+
+        history_table.add_row(
+            "Removed Edges",
+            str(len(removed_edges)),
+        )
+
+        console.print(history_table)
+
+        if (
+            not added_nodes
+            and not removed_nodes
+            and not added_edges
+            and not removed_edges
+        ):
+            console.print(
+                Panel(
+                    "[bold green]No topology changes detected.[/bold green]",
+                    border_style="green",
+                )
+            )
+        else:
+            if added_nodes:
+                console.print(
+                    Panel(
+                        "\n".join(added_nodes),
+                        title="Added Nodes",
+                        border_style="green",
+                    )
+                )
+
+            if removed_nodes:
+                console.print(
+                    Panel(
+                        "\n".join(removed_nodes),
+                        title="Removed Nodes",
+                        border_style="red",
+                    )
+                )
+
+            if added_edges:
+                console.print(
+                    Panel(
+                        "\n".join(added_edges),
+                        title="Added Edges",
+                        border_style="green",
+                    )
+                )
+
+            if removed_edges:
+                console.print(
+                    Panel(
+                        "\n".join(removed_edges),
+                        title="Removed Edges",
+                        border_style="red",
+                    )
+                )
+
+        self.history_db.save_snapshot(self.graph)
+
+        console.print(
+            Panel(
+                "Current topology snapshot saved successfully.",
+                title="History Database",
+                border_style="blue",
+            )
+        )
+
     def execute_remediation(self) -> None:
         """
         Execute remediation for all detected drift findings
@@ -402,6 +574,10 @@ class AeroDriftDashboard:
         console.print()
 
         self.display_graph_summary()
+
+        console.print()
+
+        self.display_history_diff()
 
         console.print()
 
