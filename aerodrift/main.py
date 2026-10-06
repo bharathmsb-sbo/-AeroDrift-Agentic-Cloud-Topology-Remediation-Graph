@@ -6,7 +6,7 @@ import asyncio
 import logging
 import argparse
 import sys
-from typing import Optional
+from typing import Optional, Callable, Any
 from datetime import datetime
 from functools import wraps
 
@@ -21,16 +21,19 @@ from aerodrift.state_persistence import StatePersistence
 from aerodrift.utils import Config, ExecutionSandbox
 
 
-def handle_errors(error_message: str = "An error occurred"):
+def handle_errors(error_message: str = "An error occurred") -> Callable:
     """
     Decorator for comprehensive error handling in async functions.
-    
+
     Args:
         error_message: Custom error message to display
+
+    Returns:
+        Decorator function
     """
-    def decorator(func):
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(*args, **kwargs)
             except ConnectionError as e:
@@ -91,7 +94,7 @@ class AeroDriftDaemon:
         logger.info("AeroDrift daemon initialized")
     
     @handle_errors("Failed to initialize daemon")
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Initialize the daemon by collecting initial baseline data."""
         self.dashboard.print_header("AeroDrift Daemon")
         self.dashboard.print_info("Initializing AeroDrift daemon...")
@@ -124,7 +127,7 @@ class AeroDriftDaemon:
             self.dashboard.print_error(f"Initialization failed: {str(e)}")
             raise
     
-    async def run_single_scan(self):
+    async def run_single_scan(self) -> list:
         """Run a single scan for drift detection."""
         self.dashboard.print_header("AeroDrift Scan")
         self.dashboard.print_info("Running single drift scan...")
@@ -174,10 +177,10 @@ class AeroDriftDaemon:
         
         return drift_events
     
-    async def handle_remediation(self, drift_events):
+    async def handle_remediation(self, drift_events: list) -> None:
         """
         Handle remediation of detected drift events.
-        
+
         Args:
             drift_events: List of drift events requiring remediation
         """
@@ -214,7 +217,7 @@ class AeroDriftDaemon:
                 self.dashboard.print_error(f"Remediation failed for {event.event_id}: {result['error']}")
                 self.persistence.mark_event_remediated(event.event_id, success=False)
     
-    async def run_continuous_monitoring(self):
+    async def run_continuous_monitoring(self) -> None:
         """Run continuous monitoring with polling."""
         self.dashboard.print_header("AeroDrift Monitoring")
         self.dashboard.print_info(f"Starting continuous monitoring (interval: {self.config.polling_interval}s)")
@@ -235,14 +238,14 @@ class AeroDriftDaemon:
             self.dashboard.print_warning("Monitoring stopped by user")
             self.running = False
     
-    async def run_live_dashboard(self):
+    async def run_live_dashboard(self) -> None:
         """Run live dashboard mode."""
         self.dashboard.print_header("AeroDrift Live Dashboard")
         self.dashboard.print_info("Starting live dashboard mode...")
         self.dashboard.print_info("Press Ctrl+C to stop")
         self.dashboard.print()
         
-        def update_layout():
+        def update_layout() -> Any:
             # Collect current data
             try:
                 current_topology = TopologyEngine()
@@ -250,7 +253,7 @@ class AeroDriftDaemon:
                 # For now, use the existing topology
                 if self.topology.graph.number_of_nodes() > 0:
                     current_topology = self.topology
-                
+
                 drift_events = self.drift_detector.detected_events
                 return self.dashboard.create_monitoring_layout(current_topology, drift_events)
             except Exception as e:
@@ -262,7 +265,7 @@ class AeroDriftDaemon:
         except KeyboardInterrupt:
             self.dashboard.print_warning("Live dashboard stopped by user")
     
-    def generate_incident_report(self):
+    def generate_incident_report(self) -> None:
         """Generate and display an incident report."""
         self.dashboard.print_header()
         self.dashboard.print_info("Generating incident report...")
@@ -280,7 +283,7 @@ class AeroDriftDaemon:
         # Display report
         self.dashboard.display_incident_report(drift_events, stats)
     
-    def show_statistics(self):
+    def show_statistics(self) -> None:
         """Show database and runtime statistics."""
         self.dashboard.print_header("AeroDrift Statistics")
         
