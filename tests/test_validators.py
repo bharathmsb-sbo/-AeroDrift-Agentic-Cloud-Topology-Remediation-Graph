@@ -9,6 +9,7 @@ from aerodrift.utils.validators import (
 )
 
 
+@pytest.mark.unit
 class TestInputValidator:
     """Test cases for InputValidator class."""
     
@@ -203,6 +204,7 @@ class TestInputValidator:
         assert not result.is_valid
 
 
+@pytest.mark.unit
 class TestValidateAllInputs:
     """Test cases for validate_all_inputs function."""
     

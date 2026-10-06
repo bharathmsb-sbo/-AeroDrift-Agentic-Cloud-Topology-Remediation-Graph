@@ -9,6 +9,7 @@ from pathlib import Path
 from aerodrift.utils.config import Config
 
 
+@pytest.mark.unit
 class TestConfig:
     """Test cases for Config class."""
     
