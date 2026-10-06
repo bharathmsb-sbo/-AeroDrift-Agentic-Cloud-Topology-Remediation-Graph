@@ -19,7 +19,7 @@ class ValidationError(Exception):
     pass
 
 
-class ValidationValidationSecurityLevel(Enum):
+class ValidationSecurityLevel(Enum):
     """Security levels for validation."""
     STRICT = "strict"
     MODERATE = "moderate"
