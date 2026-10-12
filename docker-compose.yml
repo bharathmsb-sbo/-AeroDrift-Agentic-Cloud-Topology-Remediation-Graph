@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  aerodrift:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aerodrift
+    restart: unless-stopped
+    volumes:
+      # Mount configuration file
+      - ./aerodrift_config.json:/app/aerodrift_config.json:ro
+      # Mount data directory for persistence
+      - aerodrift_data:/app/data
+      # Mount logs directory
+      - aerodrift_logs:/app/logs
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_USE_MOCK=${AWS_USE_MOCK:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - POLLING_INTERVAL=${POLLING_INTERVAL:-60}
+    networks:
+      - aerodrift_network
+    ports:
+      - "8080:8080"  # If adding web interface in future
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: PostgreSQL for production use
+  postgres:
+    image: postgres:15-alpine
+    container_name: aerodrift_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aerodrift
+      POSTGRES_USER: aerodrift
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aerodrift_network
+    profiles:
+      - production
+
+  # Optional: Redis for caching and job queue
+  redis:
+    image: redis:7-alpine
+    container_name: aerodrift_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - aerodrift_network
+    profiles:
+      - production
+
+volumes:
+  aerodrift_data:
+    driver: local
+  aerodrift_logs:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  aerodrift_network:
+    driver: bridge
