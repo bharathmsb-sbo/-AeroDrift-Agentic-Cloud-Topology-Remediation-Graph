@@ -36,3 +36,4 @@ AeroDrift operates as a 6-stage closed-loop autonomous pipeline:
 [ 5. Verification ]   --> Executes safe sandbox dry-run and confirms rule removal
        │
 [ 6. Audit & Report ] --> Saves snapshot diff to SQLite & compiles formal PDF report
+<!-- Pipeline testing telemetry: 2026-10-15 -->
