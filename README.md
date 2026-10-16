@@ -1,52 +1,38 @@
-# -AeroDrift-Agentic-Cloud-Topology-Remediation-Graph# AeroDrift – Agentic Cloud Topology & Remediation Graph
+# AeroDrift: Agentic Cloud Topology Remediation Graph
 
-## About the Project
+![Tests](https://img.shields.io/badge/pytest-26%20passed-brightgreen)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.14-blue)
+![Architecture](https://img.shields.io/badge/architecture-agentic--graph-purple)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**AeroDrift – Agentic Cloud Topology & Remediation Graph** is a cloud infrastructure project designed to collect, understand, and analyze cloud resource information and their relationships.
+AeroDrift is an autonomous, graph-based agentic cloud security remediation engine. It discovers cloud infrastructure assets, models multi-hop dependencies into directed graph topologies, flags unauthorized configuration drift, synthesizes deterministic AST Python remediation code, executes dry-run sandbox fixes, and preserves cryptographically verifiable audit trails with PDF incident reports.
 
-The project focuses on building a cloud topology from infrastructure resources and detecting security-related configuration drift.
+---
 
-AeroDrift is being developed incrementally, starting with mock AWS infrastructure data and gradually extending toward topology analysis, drift detection, and automated remediation.
+## 🌟 Key Features
 
-## Week 1 – Cloud Ingestion & Topology
+- **Relational Topology Engine**: Converts raw cloud resources into NetworkX directed graphs (`DiGraph`) to analyze attack paths and multi-hop blast radius.
+- **Autonomous Drift Discovery**: Inspects topology edges starting from the external internet boundary to pinpoint open ingress security violations (e.g., SSH port 22 exposed to `0.0.0.0/0`).
+- **Deterministic AST Code Synthesis**: Uses Python's native `ast` (Abstract Syntax Tree) module to programmatically construct validated Boto3 API remediation code—eliminating LLM hallucinations and syntax errors.
+- **Sandboxed Execution & Verification**: Executes generated code against isolated mock providers and programmatically verifies remediation status (`DRIFT RESOLVED`).
+- **Cryptographic Auditability & Diff Engine**: Persists graph state snapshots in SQLite, performs set-theoretic graph diffing to mathematically verify edge removals, and compiles formal PDF incident reports using ReportLab.
+- **Terminal CLI Dashboard**: Real-time terminal orchestration with resource breakdown, live drift findings, and audit summaries powered by `Rich`.
 
-The main objective of Week 1 is to build the foundation for collecting cloud infrastructure data and representing the relationships between resources.
+---
 
-Since a live AWS environment is not being used during the initial development, **mock AWS data** is used to simulate cloud resources.
+## 🏗️ Architecture Pipeline
 
-### Week 1 Work
-
-- Implemented the basic cloud ingestion module.
-- Created mock AWS infrastructure data.
-- Simulated **EC2 Instances**.
-- Simulated **Subnets**.
-- Simulated **Security Groups**.
-- Simulated **Databases**.
-- Built a cloud topology using **NetworkX**.
-- Represented cloud resources as graph nodes.
-- Represented resource relationships as graph edges.
-- Added Internet ingress relationships.
-- Implemented basic security drift detection.
-- Detected publicly accessible security group ingress rules.
-
-### Sample Resources
+AeroDrift operates as a 6-stage closed-loop autonomous pipeline:
 
 ```text
-Cloud Environment
-│
-├── Internet
-│
-├── Security Group
-│   └── sg-001
-│       └── TCP Port 22
-│           └── 0.0.0.0/0
-│
-├── EC2 Instance
-│   └── i-001 (web-server)
-│
-├── Subnets
-│   ├── subnet-public
-│   └── subnet-private
-│
-└── Database
-    └── db-001 (production-db)
+[ 1. Ingestion ]      --> Discovers AWS compute, network, database, and security assets
+       │
+[ 2. Topology ]       --> Maps 6 nodes & 4 relational edges in NetworkX DiGraph
+       │
+[ 3. Detection ]      --> Detects unauthorized public ingress (0.0.0.0/0 on port 22)
+       │
+[ 4. AST Synthesis ]  --> Generates deterministic Boto3 revoke_security_group_ingress code
+       │
+[ 5. Verification ]   --> Executes safe sandbox dry-run and confirms rule removal
+       │
+[ 6. Audit & Report ] --> Saves snapshot diff to SQLite & compiles formal PDF report
