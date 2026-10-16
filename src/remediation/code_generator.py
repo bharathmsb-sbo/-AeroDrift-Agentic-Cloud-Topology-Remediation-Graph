@@ -66,7 +66,6 @@ class RemediationCodeGenerator:
                     ),
                 ),
             ],
-            ctx=ast.Load(),
         )
 
         tree = ast.Module(
