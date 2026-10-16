@@ -5,5 +5,3 @@ __pycache__/
 data/*.db
 .pytest_cache/
 
-reports/*.pdf
-reports/
