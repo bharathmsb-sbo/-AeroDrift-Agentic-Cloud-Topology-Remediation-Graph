@@ -37,3 +37,5 @@ AeroDrift operates as a 6-stage closed-loop autonomous pipeline:
        │
 [ 6. Audit & Report ] --> Saves snapshot diff to SQLite & compiles formal PDF report
 <!-- Pipeline testing telemetry: 2026-10-15 -->
+
+<!-- Final production signoff: 2026-10-17 -->
